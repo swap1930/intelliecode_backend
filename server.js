@@ -172,25 +172,24 @@ initDB();
 app.post('/signup', async (req, res) => {
     const { username, email, password } = req.body;
 
-    // Basic input validation
     if (!username || !email || !password) {
         return res.status(400).json({ error: 'All fields are required' });
     }
 
     try {
-        // Check if email exists
         const emailResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (emailResult.rows.length > 0) {
             return res.status(400).json({ error: 'Email already exists' });
         }
 
-        // Store password as plaintext
+        const hashedPassword = await bcrypt.hash(password, 10); // Securely hash password
+
         const query = `
             INSERT INTO users (username, email, password)
             VALUES ($1, $2, $3)
             RETURNING id, username, email
         `;
-        const result = await pool.query(query, [username, email, password]);
+        const result = await pool.query(query, [username, email, hashedPassword]);
 
         res.status(201).json({
             message: 'User created successfully',
@@ -202,11 +201,11 @@ app.post('/signup', async (req, res) => {
     }
 });
 
+
 // Login endpoint
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
-    // Basic input validation
     if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
     }
@@ -221,12 +220,11 @@ app.post('/login', async (req, res) => {
 
         const user = result.rows[0];
 
-        // Simple string comparison
-        if (password !== user.password) {
+        const isMatch = await bcrypt.compare(password, user.password); // Compare hashed password
+        if (!isMatch) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        // Store user in session
         req.session.user = {
             id: user.id,
             username: user.username,
