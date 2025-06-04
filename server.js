@@ -12,14 +12,16 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { Server } = require('socket.io'); 
+const http = require('http'); 
 
 const app = express();
+const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
         origin: [
             'http://localhost:5173',
             'http://127.0.0.1:5173',
-            'https://intelliecode.netlify.app', // ← no trailing slash
+            'https://intelliecode.netlify.app',
             'https://intelliecode-frontend.onrender.com'
         ],
         credentials: true,
@@ -703,9 +705,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
 
 // Socket.io connection handler
 io.on('connection', (socket) => {
@@ -713,4 +712,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
     });
+});
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
