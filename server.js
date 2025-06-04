@@ -13,19 +13,40 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-app.use(express.json());
-
-const http = require('http');
-const { Server } = require('socket.io');
-const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://intelliecode.netlify.app/', 'https://intelliecode-frontend.onrender.com'],
+        origin: [
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            'https://intelliecode.netlify.app', // ← no trailing slash
+            'https://intelliecode-frontend.onrender.com'
+        ],
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization']
     }
 });
+
+
+app.use(express.json());
+
+// ✅ CORS for Express API
+const corsOptions = {
+    origin: [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'https://intelliecode.netlify.app',
+        'https://intelliecode-frontend.onrender.com'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+
+// Optional but recommended for preflight requests
+app.options('*', cors(corsOptions));
 
 const PORT = process.env.PORT || 3001;
 
@@ -83,12 +104,13 @@ app.use(session({
     secret: 'IntellieCode',
     resave: false,
     saveUninitialized: false,
-    cookie: {
-        secure: false,
-        maxAge: 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
-        httpOnly: true
-    }
+   cookie: {
+    secure: process.env.NODE_ENV === 'production',  
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax',
+    httpOnly: true
+}
+
 }));
 
 app.post('/clear-session', (req, res) => {
@@ -576,7 +598,8 @@ app.post('/generate-share-link', async (req, res) => {
         );
 
         // Generate the shareable URL
-        const shareUrl = `http://localhost:3000/share/${shareId}`;
+      const shareUrl = `https://intelliecode-frontend.onrender.com/share/${shareId}`;
+
         
         res.json({ shareUrl });
     } catch (error) {
