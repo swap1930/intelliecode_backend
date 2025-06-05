@@ -101,19 +101,21 @@ const pool = new Pool({
 // Session configuration
 app.use(session({
     store: new pgSession({
-        pool: pool, // your already defined PostgreSQL pool
-        tableName: 'session' // optional: default is 'session'
+        pool: pool,
+        tableName: 'session',
+        createTableIfMissing: true
     }),
     secret: 'IntellieCode',
-    resave: false,
-    saveUninitialized: false,
-   cookie: {
-    secure: process.env.NODE_ENV === 'production',  
-    maxAge: 24 * 60 * 60 * 1000,
-    sameSite: 'lax',
-    httpOnly: true
-}
-
+    resave: true,
+    saveUninitialized: true,
+    cookie: {
+        secure: true,
+        maxAge: 24 * 60 * 60 * 1000,
+        sameSite: 'none',
+        httpOnly: true,
+        path: '/',
+        domain: '.onrender.com'
+    }
 }));
 
 app.post('/clear-session', (req, res) => {
