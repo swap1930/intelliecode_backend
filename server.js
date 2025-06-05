@@ -11,45 +11,21 @@ const axios = require('axios');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { Server } = require('socket.io'); 
-const http = require('http'); 
 
 const app = express();
+app.use(express.json());
+
+const http = require('http');
+const { Server } = require('socket.io');
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: [
-            'http://localhost:5173',
-            'http://127.0.0.1:5173',
-            'https://intelliecode.netlify.app',
-            'https://intelliecode-frontend.onrender.com'
-        ],
+        origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://intelliecode.netlify.app/', 'https://intelliecode-frontend.onrender.com'],
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization']
     }
 });
-
-
-app.use(express.json());
-
-// ✅ CORS for Express API
-const corsOptions = {
-    origin: [
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'https://intelliecode.netlify.app',
-        'https://intelliecode-frontend.onrender.com'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
-
-// Optional but recommended for preflight requests
-app.options('*', cors(corsOptions));
 
 const PORT = process.env.PORT || 3001;
 
@@ -76,16 +52,16 @@ const genAI = new GoogleGenerativeAI('AIzaSyDWj0gEOQyqHc4bJC8w_9A-5WJi-d6yyVg');
 
 // CORS configuration
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://6840298fd7609ea0910635c4--brilliant-sfogliatella-92b671.netlify.app', 'https://intelliecode-frontend.onrender.com'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Add request logging middleware   
-// Add request logging middleware   
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log('Session:', req.session);
     next();
 });
 
@@ -102,19 +78,21 @@ const pool = new Pool({
 // Session configuration
 app.use(session({
     store: new pgSession({
-        pool: pool, // your already defined PostgreSQL pool
-        tableName: 'session' // optional: default is 'session'
+        pool: pool,
+        tableName: 'session',
+        createTableIfMissing: true
     }),
     secret: 'IntellieCode',
-    resave: false,
-    saveUninitialized: false,
-   cookie: {
-    secure: process.env.NODE_ENV === 'production',  
-    maxAge: 24 * 60 * 60 * 1000,
-    sameSite: 'lax',
-    httpOnly: true
-}
-
+    resave: true,
+    saveUninitialized: true,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 24 * 60 * 60 * 1000,
+        sameSite: 'lax',
+        httpOnly: true,
+        path: '/',
+        domain: '.onrender.com'
+    }
 }));
 
 app.post('/clear-session', (req, res) => {
@@ -198,24 +176,25 @@ initDB();
 app.post('/signup', async (req, res) => {
     const { username, email, password } = req.body;
 
+    // Basic input validation
     if (!username || !email || !password) {
         return res.status(400).json({ error: 'All fields are required' });
     }
 
     try {
+        // Check if email exists
         const emailResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (emailResult.rows.length > 0) {
             return res.status(400).json({ error: 'Email already exists' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10); // Securely hash password
-
+        // Store password as plaintext
         const query = `
             INSERT INTO users (username, email, password)
             VALUES ($1, $2, $3)
             RETURNING id, username, email
         `;
-        const result = await pool.query(query, [username, email, hashedPassword]);
+        const result = await pool.query(query, [username, email, password]);
 
         res.status(201).json({
             message: 'User created successfully',
@@ -227,11 +206,11 @@ app.post('/signup', async (req, res) => {
     }
 });
 
-
 // Login endpoint
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
+    // Basic input validation
     if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
     }
@@ -246,11 +225,12 @@ app.post('/login', async (req, res) => {
 
         const user = result.rows[0];
 
-        const isMatch = await bcrypt.compare(password, user.password); // Compare hashed password
-        if (!isMatch) {
+        // Simple string comparison
+        if (password !== user.password) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
+        // Store user in session
         req.session.user = {
             id: user.id,
             username: user.username,
@@ -340,7 +320,7 @@ app.get('/snippets', async (req, res) => {
         `;
         const result = await pool.query(query, [userId]);
 
-      console.log(`Fetched ${result.rows.length} snippets for user ${userId}`);
+        console.log(`Fetched ${result.rows.length} snippets for user ${userId}`);
 
         res.json({ snippets: result.rows });
     } catch (error) {
@@ -373,10 +353,10 @@ app.post('/compile', async (req, res) => {
         console.log('Sending request to Piston API:', {
             language: mapped.language,
             version: mapped.version,
-         files: [{
-    name: `main.${mapped.language}`, 
-    content: script
-}],
+            files: [{
+                name: `main.${mapped.language}`,
+                content: script
+            }],
             stdin: input
         });
 
@@ -389,7 +369,7 @@ app.post('/compile', async (req, res) => {
                 language: mapped.language,
                 version: mapped.version,
                 files: [{
-                    name: main.${mapped.language},
+                    name: `main.${mapped.language}`,
                     content: script
                 }],
                 stdin: input
@@ -401,7 +381,7 @@ app.post('/compile', async (req, res) => {
         console.log('Piston API response data:', data);
 
         if (!response.ok) {
-            throw new Error(Piston API error: ${response.statusText});
+            throw new Error(`Piston API error: ${response.statusText}`);
         }
 
         // Ensure proper output formatting
@@ -449,7 +429,7 @@ app.post('/ai-suggestion', async (req, res) => {
         });
 
         // Create prompt
-        const fullPrompt = prompt ? ${prompt}\n\n${code} : code;
+        const fullPrompt = prompt ? `${prompt}\n\n${code}` : code;
 
         // Set timeout for the request
         const timeoutPromise = new Promise((_, reject) => {
@@ -519,7 +499,7 @@ app.post('/execute', async (req, res) => {
         }
 
         // Create submission with input
-        const createResponse = await axios.post(${JUDGE_API_URL}/submissions?base64_encoded=true, {
+        const createResponse = await axios.post(`${JUDGE_API_URL}/submissions?base64_encoded=true`, {
             source_code: Buffer.from(code).toString('base64'),
             language_id: languageMappings[language.toLowerCase()],
             stdin: Buffer.from(input || '').toString('base64'),
@@ -602,8 +582,7 @@ app.post('/generate-share-link', async (req, res) => {
         );
 
         // Generate the shareable URL
-      const shareUrl = https://intelliecode-frontend.onrender.com/share/${shareId};
-
+        const shareUrl = `http://localhost:3000/share/${shareId}`;
         
         res.json({ shareUrl });
     } catch (error) {
@@ -706,6 +685,9 @@ io.on('connection', (socket) => {
     });
 });
 
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
 
 // Socket.io connection handler
 io.on('connection', (socket) => {
@@ -713,7 +695,4 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
     });
-});
-server.listen(PORT, () => {
-    console.log(Server running on port ${PORT});
 });
