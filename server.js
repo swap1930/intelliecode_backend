@@ -11,45 +11,21 @@ const axios = require('axios');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { Server } = require('socket.io'); 
-const http = require('http'); 
 
 const app = express();
+app.use(express.json());
+
+const http = require('http');
+const { Server } = require('socket.io');
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: [
-            'http://localhost:5173',
-            'http://127.0.0.1:5173',
-            'https://intelliecode.netlify.app',
-            'https://intelliecode-frontend.onrender.com'
-        ],
+        origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://intelliecode.netlify.app/', 'https://intelliecode-frontend.onrender.com'],
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization']
     }
 });
-
-
-app.use(express.json());
-
-// ✅ CORS for Express API
-const corsOptions = {
-    origin: [
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'https://intelliecode.netlify.app',
-        'https://intelliecode-frontend.onrender.com'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
-
-// Optional but recommended for preflight requests
-app.options('*', cors(corsOptions));
 
 const PORT = process.env.PORT || 3001;
 
@@ -76,15 +52,24 @@ const genAI = new GoogleGenerativeAI('AIzaSyDWj0gEOQyqHc4bJC8w_9A-5WJi-d6yyVg');
 
 // CORS configuration
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: [
+        'https://intelliecode.netlify.app',
+        'https://6840298fd7609ea0910635c4--brilliant-sfogliatella-92b671.netlify.app',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    exposedHeaders: ['Set-Cookie']
 }));
 
 // Add request logging middleware   
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log('Session:', req.session);
+    console.log('Cookies:', req.headers.cookie);
+    console.log('Origin:', req.headers.origin);
     next();
 });
 
@@ -103,18 +88,19 @@ app.use(session({
     store: new pgSession({
         pool: pool,
         tableName: 'session',
-        createTableIfMissing: true
+        createTableIfMissing: true,
+        pruneSessionInterval: 60
     }),
     secret: 'IntellieCode',
     resave: true,
     saveUninitialized: true,
+    rolling: true,
     cookie: {
         secure: true,
         maxAge: 24 * 60 * 60 * 1000,
         sameSite: 'none',
         httpOnly: true,
-        path: '/',
-        domain: '.onrender.com'
+        path: '/'
     }
 }));
 
@@ -199,24 +185,25 @@ initDB();
 app.post('/signup', async (req, res) => {
     const { username, email, password } = req.body;
 
+    // Basic input validation
     if (!username || !email || !password) {
         return res.status(400).json({ error: 'All fields are required' });
     }
 
     try {
+        // Check if email exists
         const emailResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (emailResult.rows.length > 0) {
             return res.status(400).json({ error: 'Email already exists' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10); // Securely hash password
-
+        // Store password as plaintext
         const query = `
             INSERT INTO users (username, email, password)
             VALUES ($1, $2, $3)
             RETURNING id, username, email
         `;
-        const result = await pool.query(query, [username, email, hashedPassword]);
+        const result = await pool.query(query, [username, email, password]);
 
         res.status(201).json({
             message: 'User created successfully',
@@ -227,7 +214,6 @@ app.post('/signup', async (req, res) => {
         res.status(500).json({ error: 'Error creating user' });
     }
 });
-
 
 // Login endpoint
 app.post('/login', async (req, res) => {
@@ -247,20 +233,29 @@ app.post('/login', async (req, res) => {
 
         const user = result.rows[0];
 
-        const isMatch = await bcrypt.compare(password, user.password); // Compare hashed password
-        if (!isMatch) {
+        if (password !== user.password) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
+        // Store user in session
         req.session.user = {
             id: user.id,
             username: user.username,
             email: user.email,
         };
 
-        res.json({
-            message: 'Login successful',
-            user: req.session.user,
+        // Save session explicitly
+        req.session.save((err) => {
+            if (err) {
+                console.error('Session save error:', err);
+                return res.status(500).json({ error: 'Failed to create session' });
+            }
+            
+            console.log('Session saved successfully:', req.session);
+            res.json({
+                message: 'Login successful',
+                user: req.session.user,
+            });
         });
     } catch (error) {
         console.error('Login error:', error);
@@ -281,6 +276,7 @@ app.post('/logout', (req, res) => {
 
 // Check session status
 app.get('/session-status', (req, res) => {
+    console.log('Session status check:', req.session);
     if (req.session.user) {
         console.log('Session check: User is logged in', req.session.user);
         res.json({ loggedIn: true, user: req.session.user });
@@ -603,8 +599,7 @@ app.post('/generate-share-link', async (req, res) => {
         );
 
         // Generate the shareable URL
-      const shareUrl = `https://intelliecode-frontend.onrender.com/share/${shareId}`;
-
+        const shareUrl = `http://localhost:3000/share/${shareId}`;
         
         res.json({ shareUrl });
     } catch (error) {
@@ -707,6 +702,9 @@ io.on('connection', (socket) => {
     });
 });
 
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
 
 // Socket.io connection handler
 io.on('connection', (socket) => {
@@ -714,7 +712,4 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
     });
-});
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
 });
