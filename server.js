@@ -340,7 +340,7 @@ app.get('/snippets', async (req, res) => {
         `;
         const result = await pool.query(query, [userId]);
 
-        console.log(Fetched ${result.rows.length} snippets for user ${userId});
+      console.log(`Fetched ${result.rows.length} snippets for user ${userId}`);
 
         res.json({ snippets: result.rows });
     } catch (error) {
