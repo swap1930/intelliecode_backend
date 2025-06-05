@@ -373,10 +373,10 @@ app.post('/compile', async (req, res) => {
         console.log('Sending request to Piston API:', {
             language: mapped.language,
             version: mapped.version,
-            files: [{
-                name: main.${mapped.language},
-                content: script
-            }],
+         files: [{
+    name: `main.${mapped.language}`, 
+    content: script
+}],
             stdin: input
         });
 
