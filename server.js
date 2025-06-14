@@ -212,11 +212,18 @@ app.post('/login', async (req, res) => {
     try {
         // First check if user exists
         const result = await pool.query(
-            'SELECT * FROM users WHERE email = $1',
+            'SELECT id, email, password, username FROM users WHERE email = $1',
             [email]
         );
 
-        console.log('Database query result:', result.rows);
+        console.log('Database query result:', {
+            found: result.rows.length > 0,
+            user: result.rows[0] ? {
+                id: result.rows[0].id,
+                email: result.rows[0].email,
+                username: result.rows[0].username
+            } : null
+        });
 
         if (result.rows.length === 0) {
             console.log('User not found:', email);
@@ -224,17 +231,28 @@ app.post('/login', async (req, res) => {
         }
 
         const user = result.rows[0];
-        console.log('Found user:', { id: user.id, email: user.email });
+        console.log('Found user:', { 
+            id: user.id, 
+            email: user.email,
+            username: user.username,
+            hasPassword: !!user.password
+        });
 
         // For development, allow plain text password comparison
         let validPassword = false;
         if (process.env.NODE_ENV === 'development') {
             validPassword = password === user.password;
+            console.log('Development mode - Plain text password comparison:', {
+                provided: password,
+                stored: user.password,
+                match: validPassword
+            });
         } else {
             validPassword = await bcrypt.compare(password, user.password);
+            console.log('Production mode - Bcrypt password comparison:', {
+                match: validPassword
+            });
         }
-
-        console.log('Password validation result:', validPassword);
 
         if (!validPassword) {
             console.log('Invalid password for:', email);
@@ -242,11 +260,14 @@ app.post('/login', async (req, res) => {
         }
 
         // Store user info in session
-        req.session.user = {
+        const sessionUser = {
             id: user.id,
             email: user.email,
-            name: user.name || user.username // Fallback to username if name is not available
+            name: user.username // Use username as name
         };
+
+        req.session.user = sessionUser;
+        console.log('Setting session user:', sessionUser);
 
         // Save session explicitly
         req.session.save((err) => {
@@ -255,15 +276,11 @@ app.post('/login', async (req, res) => {
                 return res.status(500).json({ error: 'Failed to save session' });
             }
             console.log('Session saved successfully for user:', email);
-            console.log('Session data:', req.session);
+            console.log('Final session data:', req.session);
             
             res.json({ 
                 message: 'Login successful',
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name || user.username
-                }
+                user: sessionUser
             });
         });
     } catch (error) {
