@@ -20,11 +20,12 @@ const { Server } = require('socket.io');
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ['http://localhost:5173', 'https://intelliecode-frontend.onrender.com'],
+        origin: ['http://localhost:5173', 'https://intelliecode-frontend.onrender.com', 'https://intelliecode.netlify.app'],
+        methods: ['GET', 'POST'],
         credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
-    }
+    },
+    transports: ['websocket', 'polling']
 });
 
 const PORT = process.env.PORT || 3001;
@@ -52,7 +53,7 @@ const genAI = new GoogleGenerativeAI('AIzaSyDWj0gEOQyqHc4bJC8w_9A-5WJi-d6yyVg');
 
 // CORS configuration
 app.use(cors({
-    origin: ['http://localhost:5173', 'https://intelliecode-frontend.onrender.com'],
+    origin: ['http://localhost:5173', 'https://intelliecode-frontend.onrender.com', 'https://intelliecode.netlify.app'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
@@ -77,20 +78,18 @@ const pool = new Pool({
 
 // Session configuration
 app.use(session({
-    store: new pgSession({
+    store: new (require('connect-pg-simple')(session))({
         pool: pool,
-        tableName: 'session',
-        createTableIfMissing: true
+        tableName: 'session'
     }),
-    secret: 'IntellieCode',
-    resave: true,
-    saveUninitialized: true,
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
     cookie: {
         secure: true,
-        maxAge: 24 * 60 * 60 * 1000,
-        sameSite: 'none',
         httpOnly: true,
-        path: '/'
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
 
