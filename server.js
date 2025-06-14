@@ -20,10 +20,10 @@ const { Server } = require('socket.io');
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://intelliecode.netlify.app/', 'https://intelliecode-frontend.onrender.com'],
+        origin: 'https://intelliecode-frontend.onrender.com',
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization']
+        allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
     }
 });
 
@@ -52,10 +52,10 @@ const genAI = new GoogleGenerativeAI('AIzaSyDWj0gEOQyqHc4bJC8w_9A-5WJi-d6yyVg');
 
 // CORS configuration
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://6840298fd7609ea0910635c4--brilliant-sfogliatella-92b671.netlify.app', 'https://intelliecode-frontend.onrender.com'],
+    origin: 'https://intelliecode-frontend.onrender.com',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
 // Add request logging middleware   
@@ -86,12 +86,11 @@ app.use(session({
     resave: true,
     saveUninitialized: true,
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: true,
         maxAge: 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
+        sameSite: 'none',
         httpOnly: true,
-        path: '/',
-        domain: '.onrender.com'
+        path: '/'
     }
 }));
 
@@ -237,9 +236,17 @@ app.post('/login', async (req, res) => {
             email: user.email,
         };
 
-        res.json({
-            message: 'Login successful',
-            user: req.session.user,
+        // Save session explicitly
+        req.session.save((err) => {
+            if (err) {
+                console.error('Session save error:', err);
+                return res.status(500).json({ error: 'Failed to create session' });
+            }
+
+            res.json({
+                message: 'Login successful',
+                user: req.session.user,
+            });
         });
     } catch (error) {
         console.error('Login error:', error);
