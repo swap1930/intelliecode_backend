@@ -86,7 +86,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,
+        secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
         sameSite: 'none',
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
@@ -207,44 +207,48 @@ app.post('/signup', async (req, res) => {
 // Login endpoint
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
-
-    // Basic input validation
-    if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
-    }
+    console.log('Login attempt for:', email);
 
     try {
-        const query = 'SELECT id, username, email, password FROM users WHERE email = $1';
-        const result = await pool.query(query, [email]);
+        const result = await pool.query(
+            'SELECT * FROM users WHERE email = $1',
+            [email]
+        );
 
         if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Invalid email or password' });
+            console.log('User not found:', email);
+            return res.status(401).json({ error: 'Invalid credentials' });
         }
 
         const user = result.rows[0];
+        const validPassword = await bcrypt.compare(password, user.password);
 
-        // Simple string comparison
-        if (password !== user.password) {
-            return res.status(401).json({ error: 'Invalid email or password' });
+        if (!validPassword) {
+            console.log('Invalid password for:', email);
+            return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        // Store user in session
+        // Store user info in session
         req.session.user = {
             id: user.id,
-            username: user.username,
             email: user.email,
+            name: user.name
         };
 
         // Save session explicitly
         req.session.save((err) => {
             if (err) {
                 console.error('Session save error:', err);
-                return res.status(500).json({ error: 'Failed to create session' });
+                return res.status(500).json({ error: 'Failed to save session' });
             }
-
-            res.json({
+            console.log('Session saved successfully for user:', email);
+            res.json({ 
                 message: 'Login successful',
-                user: req.session.user,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name
+                }
             });
         });
     } catch (error) {
@@ -264,13 +268,21 @@ app.post('/logout', (req, res) => {
     });
 });
 
-// Check session status
+// Session status endpoint
 app.get('/session-status', (req, res) => {
-    if (req.session.user) {
-        console.log('Session check: User is logged in', req.session.user);
-        res.json({ loggedIn: true, user: req.session.user });
+    console.log('Session data:', req.session);
+    console.log('User in session:', req.session.user);
+    
+    if (req.session && req.session.user) {
+        res.json({ 
+            loggedIn: true, 
+            user: {
+                id: req.session.user.id,
+                email: req.session.user.email,
+                name: req.session.user.name
+            }
+        });
     } else {
-        console.log('Session check: User is not logged in');
         res.json({ loggedIn: false });
     }
 });
