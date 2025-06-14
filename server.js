@@ -20,7 +20,7 @@ const { Server } = require('socket.io');
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: 'https://intelliecode-frontend.onrender.com',
+        origin: ['http://localhost:5173', 'https://intelliecode-frontend.onrender.com'],
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
@@ -52,7 +52,7 @@ const genAI = new GoogleGenerativeAI('AIzaSyDWj0gEOQyqHc4bJC8w_9A-5WJi-d6yyVg');
 
 // CORS configuration
 app.use(cors({
-    origin: 'https://intelliecode-frontend.onrender.com',
+    origin: ['http://localhost:5173', 'https://intelliecode-frontend.onrender.com'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
