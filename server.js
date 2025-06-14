@@ -210,10 +210,13 @@ app.post('/login', async (req, res) => {
     console.log('Login attempt for:', email);
 
     try {
+        // First check if user exists
         const result = await pool.query(
             'SELECT * FROM users WHERE email = $1',
             [email]
         );
+
+        console.log('Database query result:', result.rows);
 
         if (result.rows.length === 0) {
             console.log('User not found:', email);
@@ -221,7 +224,17 @@ app.post('/login', async (req, res) => {
         }
 
         const user = result.rows[0];
-        const validPassword = await bcrypt.compare(password, user.password);
+        console.log('Found user:', { id: user.id, email: user.email });
+
+        // For development, allow plain text password comparison
+        let validPassword = false;
+        if (process.env.NODE_ENV === 'development') {
+            validPassword = password === user.password;
+        } else {
+            validPassword = await bcrypt.compare(password, user.password);
+        }
+
+        console.log('Password validation result:', validPassword);
 
         if (!validPassword) {
             console.log('Invalid password for:', email);
@@ -232,7 +245,7 @@ app.post('/login', async (req, res) => {
         req.session.user = {
             id: user.id,
             email: user.email,
-            name: user.name
+            name: user.name || user.username // Fallback to username if name is not available
         };
 
         // Save session explicitly
@@ -242,12 +255,14 @@ app.post('/login', async (req, res) => {
                 return res.status(500).json({ error: 'Failed to save session' });
             }
             console.log('Session saved successfully for user:', email);
+            console.log('Session data:', req.session);
+            
             res.json({ 
                 message: 'Login successful',
                 user: {
                     id: user.id,
                     email: user.email,
-                    name: user.name
+                    name: user.name || user.username
                 }
             });
         });
