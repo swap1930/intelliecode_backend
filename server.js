@@ -61,7 +61,7 @@ app.use(cors({
 
 // Add request logging middleware   
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log(${new Date().toISOString()} - ${req.method} ${req.url});
     console.log('Session:', req.session);
     next();
 });
@@ -86,7 +86,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: true,
         httpOnly: true,
         sameSite: 'none',
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
@@ -207,80 +207,44 @@ app.post('/signup', async (req, res) => {
 // Login endpoint
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
-    console.log('Login attempt for:', email);
+
+    // Basic input validation
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
 
     try {
-        // First check if user exists
-        const result = await pool.query(
-            'SELECT id, email, password, username FROM users WHERE email = $1',
-            [email]
-        );
-
-        console.log('Database query result:', {
-            found: result.rows.length > 0,
-            user: result.rows[0] ? {
-                id: result.rows[0].id,
-                email: result.rows[0].email,
-                username: result.rows[0].username
-            } : null
-        });
+        const query = 'SELECT id, username, email, password FROM users WHERE email = $1';
+        const result = await pool.query(query, [email]);
 
         if (result.rows.length === 0) {
-            console.log('User not found:', email);
-            return res.status(401).json({ error: 'Invalid credentials' });
+            return res.status(401).json({ error: 'Invalid email or password' });
         }
 
         const user = result.rows[0];
-        console.log('Found user:', { 
-            id: user.id, 
-            email: user.email,
-            username: user.username,
-            hasPassword: !!user.password
-        });
 
-        // For development, allow plain text password comparison
-        let validPassword = false;
-        if (process.env.NODE_ENV === 'development') {
-            validPassword = password === user.password;
-            console.log('Development mode - Plain text password comparison:', {
-                provided: password,
-                stored: user.password,
-                match: validPassword
-            });
-        } else {
-            validPassword = await bcrypt.compare(password, user.password);
-            console.log('Production mode - Bcrypt password comparison:', {
-                match: validPassword
-            });
+        // Simple string comparison
+        if (password !== user.password) {
+            return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        if (!validPassword) {
-            console.log('Invalid password for:', email);
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        // Store user info in session
-        const sessionUser = {
+        // Store user in session
+        req.session.user = {
             id: user.id,
+            username: user.username,
             email: user.email,
-            name: user.username // Use username as name
         };
-
-        req.session.user = sessionUser;
-        console.log('Setting session user:', sessionUser);
 
         // Save session explicitly
         req.session.save((err) => {
             if (err) {
                 console.error('Session save error:', err);
-                return res.status(500).json({ error: 'Failed to save session' });
+                return res.status(500).json({ error: 'Failed to create session' });
             }
-            console.log('Session saved successfully for user:', email);
-            console.log('Final session data:', req.session);
-            
-            res.json({ 
+
+            res.json({
                 message: 'Login successful',
-                user: sessionUser
+                user: req.session.user,
             });
         });
     } catch (error) {
@@ -300,21 +264,13 @@ app.post('/logout', (req, res) => {
     });
 });
 
-// Session status endpoint
+// Check session status
 app.get('/session-status', (req, res) => {
-    console.log('Session data:', req.session);
-    console.log('User in session:', req.session.user);
-    
-    if (req.session && req.session.user) {
-        res.json({ 
-            loggedIn: true, 
-            user: {
-                id: req.session.user.id,
-                email: req.session.user.email,
-                name: req.session.user.name
-            }
-        });
+    if (req.session.user) {
+        console.log('Session check: User is logged in', req.session.user);
+        res.json({ loggedIn: true, user: req.session.user });
     } else {
+        console.log('Session check: User is not logged in');
         res.json({ loggedIn: false });
     }
 });
@@ -370,7 +326,7 @@ app.get('/snippets', async (req, res) => {
         `;
         const result = await pool.query(query, [userId]);
 
-        console.log(`Fetched ${result.rows.length} snippets for user ${userId}`);
+        console.log(Fetched ${result.rows.length} snippets for user ${userId});
 
         res.json({ snippets: result.rows });
     } catch (error) {
@@ -404,7 +360,7 @@ app.post('/compile', async (req, res) => {
             language: mapped.language,
             version: mapped.version,
             files: [{
-                name: `main.${mapped.language}`,
+                name: main.${mapped.language},
                 content: script
             }],
             stdin: input
@@ -419,7 +375,7 @@ app.post('/compile', async (req, res) => {
                 language: mapped.language,
                 version: mapped.version,
                 files: [{
-                    name: `main.${mapped.language}`,
+                    name: main.${mapped.language},
                     content: script
                 }],
                 stdin: input
@@ -431,7 +387,7 @@ app.post('/compile', async (req, res) => {
         console.log('Piston API response data:', data);
 
         if (!response.ok) {
-            throw new Error(`Piston API error: ${response.statusText}`);
+            throw new Error(Piston API error: ${response.statusText});
         }
 
         // Ensure proper output formatting
@@ -479,7 +435,7 @@ app.post('/ai-suggestion', async (req, res) => {
         });
 
         // Create prompt
-        const fullPrompt = prompt ? `${prompt}\n\n${code}` : code;
+        const fullPrompt = prompt ? ${prompt}\n\n${code} : code;
 
         // Set timeout for the request
         const timeoutPromise = new Promise((_, reject) => {
@@ -549,7 +505,7 @@ app.post('/execute', async (req, res) => {
         }
 
         // Create submission with input
-        const createResponse = await axios.post(`${JUDGE_API_URL}/submissions?base64_encoded=true`, {
+        const createResponse = await axios.post(${JUDGE_API_URL}/submissions?base64_encoded=true, {
             source_code: Buffer.from(code).toString('base64'),
             language_id: languageMappings[language.toLowerCase()],
             stdin: Buffer.from(input || '').toString('base64'),
@@ -632,7 +588,7 @@ app.post('/generate-share-link', async (req, res) => {
         );
 
         // Generate the shareable URL
-        const shareUrl = `http://localhost:3000/share/${shareId}`;
+        const shareUrl = http://localhost:3000/share/${shareId};
         
         res.json({ shareUrl });
     } catch (error) {
@@ -736,7 +692,7 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(Server running on port ${PORT});
 });
 
 // Socket.io connection handler
