@@ -86,12 +86,13 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,
-        httpOnly: true,
-        sameSite: 'none',
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        secure: true,          // ✅ HTTPS sathi mandatory
+        httpOnly: true,        // ✅ JS access block
+        sameSite: 'none',      // ✅ Cross-origin session
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
     }
 }));
+
 
 app.post('/clear-session', (req, res) => {
     if (req.session.executionContext) {
