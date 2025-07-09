@@ -59,9 +59,9 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
-// Add request logging middleware   
+// Add request logging middleware
 app.use((req, res, next) => {
-    console.log(${new Date().toISOString()} - ${req.method} ${req.url});
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     console.log('Session:', req.session);
     next();
 });
@@ -326,7 +326,7 @@ app.get('/snippets', async (req, res) => {
         `;
         const result = await pool.query(query, [userId]);
 
-        console.log(Fetched ${result.rows.length} snippets for user ${userId});
+        console.log(`Fetched ${result.rows.length} snippets for user ${userId}`);
 
         res.json({ snippets: result.rows });
     } catch (error) {
@@ -360,7 +360,7 @@ app.post('/compile', async (req, res) => {
             language: mapped.language,
             version: mapped.version,
             files: [{
-                name: main.${mapped.language},
+                name: `main.${mapped.language}`,
                 content: script
             }],
             stdin: input
@@ -375,7 +375,7 @@ app.post('/compile', async (req, res) => {
                 language: mapped.language,
                 version: mapped.version,
                 files: [{
-                    name: main.${mapped.language},
+                    name: `main.${mapped.language}`,
                     content: script
                 }],
                 stdin: input
@@ -387,7 +387,7 @@ app.post('/compile', async (req, res) => {
         console.log('Piston API response data:', data);
 
         if (!response.ok) {
-            throw new Error(Piston API error: ${response.statusText});
+            throw new Error(`Piston API error: ${response.statusText}`);
         }
 
         // Ensure proper output formatting
@@ -423,7 +423,6 @@ app.post('/ai-suggestion', async (req, res) => {
     }
 
     try {
-        // Get the generative model with timeout
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.0-flash",
             generationConfig: {
@@ -434,15 +433,12 @@ app.post('/ai-suggestion', async (req, res) => {
             }
         });
 
-        // Create prompt
-        const fullPrompt = prompt ? ${prompt}\n\n${code} : code;
+        const fullPrompt = prompt ? `${prompt}\n\n${code}` : code;
 
-        // Set timeout for the request
         const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Request timed out')), 30000); // 30 seconds timeout
+            setTimeout(() => reject(new Error('Request timed out')), 30000);
         });
 
-        // Generate content with timeout
         const generatePromise = model.generateContent(fullPrompt);
         const result = await Promise.race([generatePromise, timeoutPromise]);
         
@@ -487,7 +483,6 @@ app.post('/execute', async (req, res) => {
             });
         }
 
-        // Check if code requires input
         const requiresInput = isFirstRun && (
             code.includes('scanf') || 
             code.includes('cin') || 
@@ -504,8 +499,7 @@ app.post('/execute', async (req, res) => {
             });
         }
 
-        // Create submission with input
-        const createResponse = await axios.post(${JUDGE_API_URL}/submissions?base64_encoded=true, {
+        const createResponse = await axios.post(`${JUDGE_API_URL}/submissions?base64_encoded=true`, {
             source_code: Buffer.from(code).toString('base64'),
             language_id: languageMappings[language.toLowerCase()],
             stdin: Buffer.from(input || '').toString('base64'),
@@ -529,7 +523,6 @@ app.post('/execute', async (req, res) => {
             throw new Error('Failed to create submission');
         }
 
-        // Format response
         let output = '';
         let error = '';
 
@@ -540,14 +533,11 @@ app.post('/execute', async (req, res) => {
             error = Buffer.from(createResponse.data.stderr, 'base64').toString();
         }
 
-        // For C code with scanf, we need to handle the output differently
         if (language.toLowerCase() === 'c' && code.includes('scanf')) {
             if (isFirstRun) {
-                // Get only the prompt before scanf
                 const lines = output.split('\n');
                 output = lines[0];
             } else {
-                // For subsequent runs, get all output
                 output = output.trim();
             }
         }
@@ -577,128 +567,56 @@ app.post('/execute', async (req, res) => {
 app.post('/generate-share-link', async (req, res) => {
     try {
         const { code, language } = req.body;
-        
-        // Generate a unique ID for the shared code
         const shareId = crypto.randomBytes(8).toString('hex');
-        
-        // Store the code in the database
-        const result = await pool.query(
-            'INSERT INTO shared_codes (share_id, code, language) VALUES ($1, $2, $3) RETURNING share_id',
-            [shareId, code, language]
-        );
 
-        // Generate the shareable URL
-        const shareUrl = http://localhost:3000/share/${shareId};
-        
-        res.json({ shareUrl });
+        await pool.query(`
+            INSERT INTO shared_codes (share_id, code, language)
+            VALUES ($1, $2, $3)
+        `, [shareId, code, language]);
+
+        console.log(`Share link generated: ${shareId}`);
+
+        res.json({
+            success: true,
+            shareId
+        });
     } catch (error) {
         console.error('Error generating share link:', error);
-        res.status(500).json({ error: 'Failed to generate share link' });
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
     }
 });
 
-// Get shared code
-app.get('/shared-code/:shareId', async (req, res) => {
+// Fetch shared code by shareId
+app.get('/shared/:shareId', async (req, res) => {
     try {
         const { shareId } = req.params;
-        
-        const result = await pool.query(
-            'SELECT code, language FROM shared_codes WHERE share_id = $1',
-            [shareId]
-        );
+        const result = await pool.query(`
+            SELECT code, language FROM shared_codes
+            WHERE share_id = $1
+        `, [shareId]);
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Code not found' });
+            return res.status(404).json({ success: false, message: 'Shared code not found' });
         }
 
-        res.json(result.rows[0]);
+        res.json({
+            success: true,
+            code: result.rows[0].code,
+            language: result.rows[0].language
+        });
     } catch (error) {
         console.error('Error fetching shared code:', error);
-        res.status(500).json({ error: 'Failed to fetch shared code' });
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
     }
 });
 
-// Socket.io real-time code execution
-io.on('connection', (socket) => {
-    console.log('User connected for real-time code execution:', socket.id);
-
-    socket.on('execute_code', async ({ code, language }) => {
-        console.log('Received code execution request:', { 
-            language,
-            codeLength: code.length,
-            codePreview: code.substring(0, 100) + '...'
-        });
-        
-        try {
-            if (!code || !language) {
-                console.log('Missing fields:', { code: !!code, language: !!language });
-                socket.emit('execution_error', { error: 'Missing required fields' });
-                return;
-            }
-
-            // Create submission
-            console.log('Creating submission with JDoodle...');
-            const response = await axios.post(JUDGE_API_URL, {
-                clientId: JUDGE_CLIENT_ID,
-                clientSecret: JUDGE_SECRET_KEY,
-                script: code,
-                language: languageMappings[language.toLowerCase()],
-                stdin: '',
-                versionIndex: '0'
-            }, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            console.log('JDoodle API Response:', response.data);
-
-            if (response.data.output) {
-                console.log('Sending output to client:', response.data.output);
-                socket.emit('execution_result', { 
-                    output: response.data.output,
-                    error: '',
-                    status: 'Completed',
-                    time: response.data.cpuTime || 0,
-                    memory: response.data.memory || 0
-                });
-            } else if (response.data.error) {
-                console.log('Sending error to client:', response.data.error);
-                socket.emit('execution_error', { error: response.data.error });
-            } else {
-                console.log('No output or error received');
-                socket.emit('execution_result', { 
-                    output: 'Program executed successfully but produced no output.',
-                    error: '',
-                    status: 'Completed',
-                    time: 0,
-                    memory: 0
-                });
-            }
-
-        } catch (error) {
-            console.error('Error executing code:', error);
-            console.error('Error details:', error.response?.data || error.message);
-            socket.emit('execution_error', { 
-                error: 'Failed to execute code',
-                details: error.response?.data?.message || error.message
-            });
-        }
-    });
-
-    socket.on('disconnect', () => {
-        console.log('User disconnected from real-time code execution:', socket.id);
-    });
-});
-
+// Start server
 server.listen(PORT, () => {
-    console.log(Server running on port ${PORT});
-});
-
-// Socket.io connection handler
-io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
-    socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-    });
+    console.log(`Server running on port ${PORT}`);
 });
